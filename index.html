@@ -148,9 +148,12 @@
                         <h4 data-i18n="settingsLanguageTitle">Language</h4>
                         <p data-i18n="settingsLanguageDescription">This keeps the language toggle from Blindfolded Letter Pairs, minus lettering scheme.</p>
                     </div>
-                    <div class="settings-inline-row">
-                        <span id="settings-language-current" class="settings-detail-text"></span>
-                        <button type="button" class="action-btn" onclick="toggleLanguage()" id="toggle-language-btn"></button>
+                    <div class="settings-inline-row settings-language-row">
+                        <span id="settings-language-current" class="settings-detail-text settings-language-current"></span>
+                        <div class="settings-language-toggle" role="group" aria-label="Language switcher">
+                            <button type="button" class="settings-language-btn" onclick="setAppLanguage('zh-TW')" id="toggle-language-zh"></button>
+                            <button type="button" class="settings-language-btn" onclick="setAppLanguage('en')" id="toggle-language-en"></button>
+                        </div>
                     </div>
                 </section>
 

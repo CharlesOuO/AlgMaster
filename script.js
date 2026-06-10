@@ -93,8 +93,7 @@ const APP_TRANSLATIONS = {
         settingsLanguageTitle: "語言",
         settingsLanguageDescription: "跟 Blindfolded Letter Pairs 一樣保留語言切換，但不做 lettering scheme。",
         settingsLanguageCurrent: "目前語言：{language}",
-        settingsLanguageToggleToEnglish: "切換成 English",
-        settingsLanguageToggleToChinese: "切換成繁體中文",
+        settingsLanguageToggleGroupLabel: "語言切換",
         settingsBackupTitle: "備份與匯入",
         settingsBackupDescription: "匯出目前進度與自訂公式，或從先前備份還原。",
         settingsExportTypeLabel: "匯出格式",
@@ -156,8 +155,7 @@ const APP_TRANSLATIONS = {
         settingsLanguageTitle: "Language",
         settingsLanguageDescription: "This keeps the language toggle from Blindfolded Letter Pairs, minus lettering scheme.",
         settingsLanguageCurrent: "Current language: {language}",
-        settingsLanguageToggleToEnglish: "Switch to English",
-        settingsLanguageToggleToChinese: "Switch to Traditional Chinese",
+        settingsLanguageToggleGroupLabel: "Language switcher",
         settingsBackupTitle: "Backup & Import",
         settingsBackupDescription: "Export your current progress and custom algorithms, or restore from a backup.",
         settingsExportTypeLabel: "Export Format",
@@ -541,20 +539,127 @@ function getCasePatternImageUrl(casePattern = "") {
     return imageUrl;
 }
 
-function getAlgoImageUrl(algo) {
-    if (algo.imagePath) return algo.imagePath;
-    if (algo.speedCubeDbFaces) {
-        const puzzleGenImageUrl = getSpeedCubeDbPuzzleGenImageUrl(algo.speedCubeDbFaces);
-        if (puzzleGenImageUrl) return puzzleGenImageUrl;
-        const speedCubeDbImageUrl = getSpeedCubeDbImageUrl(algo.speedCubeDbFaces);
-        if (speedCubeDbImageUrl) return speedCubeDbImageUrl;
-    }
-    if (algo.casePattern) {
-        const casePatternImageUrl = getCasePatternImageUrl(algo.casePattern);
-        if (casePatternImageUrl) return casePatternImageUrl;
+function getZbllPllStyleImageUrl(speedCubeDbFaces = {}) {
+    const faceValues = {
+        us: String(speedCubeDbFaces?.us || "").trim().toLowerCase(),
+        ub: String(speedCubeDbFaces?.ub || "").trim().toLowerCase(),
+        uf: String(speedCubeDbFaces?.uf || "").trim().toLowerCase(),
+        ul: String(speedCubeDbFaces?.ul || "").trim().toLowerCase(),
+        ur: String(speedCubeDbFaces?.ur || "").trim().toLowerCase()
+    };
+
+    if (Object.values(faceValues).some((value) => value.length !== 9)) return "";
+
+    const cacheKey = `zbll-flat|${faceValues.us}|${faceValues.ub}|${faceValues.uf}|${faceValues.ul}|${faceValues.ur}`;
+    if (speedCubeDbImageCache.has(cacheKey)) return speedCubeDbImageCache.get(cacheKey);
+
+    const topStrip = [faceValues.ub[0], faceValues.ub[1], faceValues.ub[2]];
+    const rightStrip = [faceValues.ur[2], faceValues.ur[1], faceValues.ur[0]];
+    const bottomStrip = [faceValues.uf[0], faceValues.uf[1], faceValues.uf[2]];
+    const leftStrip = [faceValues.ul[0], faceValues.ul[1], faceValues.ul[2]];
+
+    const flatStickerColorMap = {
+        y: "#FEFE00",
+        o: "#FFA100",
+        r: "#EE0000",
+        g: "#00D800",
+        b: "#0000F2",
+        w: "#FFFFFF"
+    };
+    const strokeColor = "#000000";
+    const cellSize = 22;
+    const strokeWidth = 2;
+    const padding = 2;
+    const gridSize = 5;
+    const viewBoxSize = (padding * 2) + (cellSize * gridSize);
+    const svgMarkup = [
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}" width="${viewBoxSize}" height="${viewBoxSize}">`,
+        `<rect width="${viewBoxSize}" height="${viewBoxSize}" fill="transparent"/>`
+    ];
+
+    const drawSticker = (gridX, gridY, fillColor) => {
+        const x = padding + (gridX * cellSize);
+        const y = padding + (gridY * cellSize);
+        svgMarkup.push(
+            `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/>`
+        );
+    };
+
+    for (let rowIndex = 0; rowIndex < 3; rowIndex += 1) {
+        for (let columnIndex = 0; columnIndex < 3; columnIndex += 1) {
+            const stickerIndex = (rowIndex * 3) + columnIndex;
+            const fillColor = flatStickerColorMap[faceValues.us[stickerIndex]] || "#1f2937";
+            drawSticker(columnIndex + 1, rowIndex + 1, fillColor);
+        }
     }
 
-    return getVisualCubeUrl(algo.defaultAlgo, getVisualStageForAlgorithm(algo));
+    topStrip.forEach((token, index) => {
+        drawSticker(index + 1, 0, flatStickerColorMap[token] || "#1f2937");
+    });
+
+    rightStrip.forEach((token, index) => {
+        drawSticker(4, index + 1, flatStickerColorMap[token] || "#1f2937");
+    });
+
+    bottomStrip.forEach((token, index) => {
+        drawSticker(index + 1, 4, flatStickerColorMap[token] || "#1f2937");
+    });
+
+    leftStrip.forEach((token, index) => {
+        drawSticker(0, index + 1, flatStickerColorMap[token] || "#1f2937");
+    });
+
+    svgMarkup.push("</svg>");
+
+    const imageUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgMarkup.join(""))}`;
+    speedCubeDbImageCache.set(cacheKey, imageUrl);
+    return imageUrl;
+}
+
+function getAlgoImageSources(algo) {
+    if (algo.imagePath) return { src: algo.imagePath, fallbackSrc: "" };
+
+    const zbllPllStyleImageUrl = algo.category === "zbll" && algo.speedCubeDbFaces
+        ? getZbllPllStyleImageUrl(algo.speedCubeDbFaces)
+        : "";
+    const speedCubeDbPuzzleGenImageUrl = algo.speedCubeDbFaces
+        ? getSpeedCubeDbPuzzleGenImageUrl(algo.speedCubeDbFaces)
+        : "";
+    const speedCubeDbImageUrl = algo.speedCubeDbFaces
+        ? getSpeedCubeDbImageUrl(algo.speedCubeDbFaces)
+        : "";
+    const casePatternImageUrl = algo.casePattern
+        ? getCasePatternImageUrl(algo.casePattern)
+        : "";
+
+    if (zbllPllStyleImageUrl) {
+        return {
+            src: zbllPllStyleImageUrl,
+            fallbackSrc: speedCubeDbPuzzleGenImageUrl || speedCubeDbImageUrl || casePatternImageUrl || ""
+        };
+    }
+
+    if (algo.speedCubeDbFaces) {
+        if (speedCubeDbPuzzleGenImageUrl) return { src: speedCubeDbPuzzleGenImageUrl, fallbackSrc: speedCubeDbImageUrl || "" };
+        if (speedCubeDbImageUrl) return { src: speedCubeDbImageUrl, fallbackSrc: "" };
+    }
+    if (algo.casePattern) {
+        if (casePatternImageUrl) return { src: casePatternImageUrl, fallbackSrc: "" };
+    }
+
+    return {
+        src: getVisualCubeUrl(algo.defaultAlgo, getVisualStageForAlgorithm(algo)),
+        fallbackSrc: ""
+    };
+}
+
+function getAlgoImageHtml(algo, altText) {
+    const { src, fallbackSrc } = getAlgoImageSources(algo);
+    const fallbackAttributes = fallbackSrc && fallbackSrc !== src
+        ? ` data-fallback-src="${escapeHtml(fallbackSrc)}" onerror="if(this.dataset.fallbackSrc){this.onerror=null;this.src=this.dataset.fallbackSrc;delete this.dataset.fallbackSrc;}"`
+        : "";
+
+    return `<img src="${escapeHtml(src)}" alt="${escapeHtml(altText)}"${fallbackAttributes}>`;
 }
 
 function getAvailableAlgorithmCategories() {
@@ -710,7 +815,9 @@ function updateImportFileLabel() {
 function renderSettingsView() {
     const formulaDetailsElement = document.getElementById("settings-formula-details");
     const languageCurrentElement = document.getElementById("settings-language-current");
-    const toggleLanguageButton = document.getElementById("toggle-language-btn");
+    const languageToggleElement = document.querySelector(".settings-language-toggle");
+    const toggleLanguageZhButton = document.getElementById("toggle-language-zh");
+    const toggleLanguageEnButton = document.getElementById("toggle-language-en");
     const exportTypeSelect = document.getElementById("export-type");
 
     if (formulaDetailsElement) {
@@ -724,10 +831,20 @@ function renderSettingsView() {
         languageCurrentElement.textContent = t("settingsLanguageCurrent", { language: getLanguageLabel() });
     }
 
-    if (toggleLanguageButton) {
-        toggleLanguageButton.textContent = currentLanguage === "zh-TW"
-            ? t("settingsLanguageToggleToEnglish")
-            : t("settingsLanguageToggleToChinese");
+    if (languageToggleElement) {
+        languageToggleElement.setAttribute("aria-label", t("settingsLanguageToggleGroupLabel"));
+    }
+
+    if (toggleLanguageZhButton) {
+        toggleLanguageZhButton.textContent = t("languageNameZhTW");
+        toggleLanguageZhButton.classList.toggle("is-active", currentLanguage === "zh-TW");
+        toggleLanguageZhButton.setAttribute("aria-pressed", currentLanguage === "zh-TW" ? "true" : "false");
+    }
+
+    if (toggleLanguageEnButton) {
+        toggleLanguageEnButton.textContent = t("languageNameEn");
+        toggleLanguageEnButton.classList.toggle("is-active", currentLanguage === "en");
+        toggleLanguageEnButton.setAttribute("aria-pressed", currentLanguage === "en" ? "true" : "false");
     }
 
     if (exportTypeSelect) {
@@ -749,8 +866,11 @@ function renderSettingsView() {
     updateImportFileLabel();
 }
 
-function toggleLanguage() {
-    setStoredAppLanguage(currentLanguage === "zh-TW" ? "en" : "zh-TW");
+function setAppLanguage(language) {
+    const normalizedLanguage = normalizeAppLanguage(language);
+    if (normalizedLanguage === currentLanguage) return;
+
+    setStoredAppLanguage(normalizedLanguage);
     applyStaticTranslations();
     renderCategorySelect("list-type-select", currentListCategory, setListAlgorithmCategory);
     renderCategorySelect("trainer-type-select", currentTrainerCategory, setTrainerAlgorithmCategory);
@@ -1321,13 +1441,13 @@ function renderAlgoList() {
     algorithms.forEach((algo) => {
         const currentStatus = statusMap[algo.id] || "unlearned";
         const userAlgo = customMap[algo.id] || "";
-        const imageUrl = getAlgoImageUrl(algo);
+        const imageHtml = getAlgoImageHtml(algo, algo.name);
 
         const itemElement = document.createElement("div");
         itemElement.className = `algo-item status-bg-${currentStatus}`;
         itemElement.innerHTML = `
             <div class="algo-visual">
-                <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(algo.name)}">
+                ${imageHtml}
             </div>
             <div class="algo-content">
                 <div class="algo-header">
@@ -1370,13 +1490,13 @@ function renderTrainerCasePicker() {
     gridElement.innerHTML = "";
 
     visibleAlgorithms.forEach((algo) => {
-        const imageUrl = getAlgoImageUrl(algo);
+        const imageHtml = getAlgoImageHtml(algo, getAlgoDisplayName(algo));
         const buttonElement = document.createElement("button");
         buttonElement.type = "button";
         buttonElement.className = `trainer-case-btn${selectedCaseIds.has(algo.id) ? " is-selected" : ""}`;
         buttonElement.setAttribute("aria-pressed", selectedCaseIds.has(algo.id) ? "true" : "false");
         buttonElement.innerHTML = `
-            <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(getAlgoDisplayName(algo))}">
+            ${imageHtml}
             <span class="trainer-case-btn-name">${escapeHtml(getAlgoDisplayName(algo))}</span>
         `;
         buttonElement.addEventListener("click", () => toggleTrainerCaseSelection(algo.id));
