@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AlgMaster | 3x3 Cube Alg Trainer</title>
+    <meta name="description" content="AlgMaster is an advanced cube alg trainer for OLL, PLL, ZBLL. Track your learning progress with smart spaced repetition.">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div style="display: none;">
+        <h1>Welcome to AlgMaster</h1>
+        <h2>The Ultimate Cube Alg Trainer</h2>
+    </div>
+
+    <div class="nav-bar">
+        <div class="nav-container">
+            <button class="nav-btn active" onclick="switchTab('list', event)" data-i18n="navList">Algorithms</button>
+            <button class="nav-btn" onclick="switchTab('trainer', event)" data-i18n="navTrainer">Trainer</button>
+            <button class="nav-btn" onclick="switchTab('settings', event)" data-i18n="navSettings">Settings</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="view-list" class="view-section active">
+            <div class="control-panel">
+                <h3 data-i18n="listTitle">Algorithms</h3>
+                <p class="subtitle" data-i18n="listSubtitle">Pick a type, then override any alg with your preferred version. Learning status is saved too.</p>
+                <div class="filter-group">
+                    <div class="filter-row">
+                        <div class="filter-shell">
+                            <label class="filter-label" for="list-type-select" data-i18n="listTypeLabel">Algorithm Type</label>
+                            <div class="type-select-shell">
+                                <select id="list-type-select" class="type-select"></select>
+                            </div>
+                        </div>
+                        <div id="list-subtype-filter" class="filter-shell hidden">
+                            <label class="filter-label" for="list-subtype-select">ZBLL Type</label>
+                            <div class="type-select-shell">
+                                <select id="list-subtype-select" class="type-select"></select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="algo-list-container" class="algo-list"></div>
+        </div>
+
+        <div id="view-trainer" class="view-section">
+            <div class="control-panel">
+                <div class="filter-group">
+                    <div class="filter-row">
+                        <div class="filter-shell">
+                            <label class="filter-label" for="trainer-type-select" data-i18n="trainerTypeLabel">Trainer Type</label>
+                            <div class="type-select-shell">
+                                <select id="trainer-type-select" class="type-select"></select>
+                            </div>
+                        </div>
+                        <div id="trainer-subtype-filter" class="filter-shell hidden">
+                            <label class="filter-label" for="trainer-subtype-select">ZBLL Type</label>
+                            <div class="type-select-shell">
+                                <select id="trainer-subtype-select" class="type-select"></select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <div class="trainer-range-toolbar">
+                        <label class="filter-label" data-i18n="trainerRangeLabel">Training Range</label>
+                        <div class="trainer-range-actions">
+                            <button type="button" class="action-btn trainer-range-action-btn" onclick="selectAllTrainerCases()" data-i18n="trainerSelectAll">Select All</button>
+                            <button type="button" class="action-btn trainer-range-action-btn" onclick="clearTrainerCaseSelection()" data-i18n="trainerClearSelection">Clear</button>
+                        </div>
+                    </div>
+                    <div class="trainer-status-filter-row">
+                        <span class="filter-label" data-i18n="trainerStatusFilterLabel">Case Status</span>
+                        <div id="trainer-status-filter-shell" class="trainer-status-filter-shell"></div>
+                    </div>
+                    <div id="trainer-range-summary" class="trainer-range-summary"></div>
+                    <div id="trainer-case-grid" class="trainer-case-grid"></div>
+                </div>
+            </div>
+
+            <div class="trainer-card" id="timer-touch-area">
+                <div class="trainer-meta">
+                    <span id="scramble-group" class="badge">--</span>
+                    <span id="scramble-name" class="scramble-title">--</span>
+                </div>
+                <div id="trainer-scramble" class="trainer-scramble-text" data-i18n="trainerWaitingScramble">Choose your range, then press Space or tap the card to start.</div>
+
+                <div class="trainer-timer-shell">
+                    <div id="trainer-timer" class="trainer-timer-display">0.00</div>
+                    <div id="trainer-status" class="trainer-status" data-i18n="trainerWaitingStatus">Waiting</div>
+                </div>
+                <div id="trainer-penalty-shell" class="trainer-penalty-shell hidden">
+                    <div class="trainer-penalty-row trainer-penalty-row-compact">
+                        <button id="trainer-plus2-btn" type="button" class="action-btn trainer-history-action-btn" aria-pressed="false">+2</button>
+                        <button id="trainer-dnf-btn" type="button" class="action-btn trainer-history-action-btn" aria-pressed="false">DNF</button>
+                        <button id="trainer-delete-btn" type="button" class="action-btn trainer-history-action-btn trainer-delete-btn" aria-pressed="false">Del</button>
+                        <button id="trainer-delete-confirm-btn" type="button" class="action-btn trainer-history-action-btn trainer-delete-confirm-btn hidden">OK</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="trainer-averages-shell">
+                <div id="trainer-averages-label" class="trainer-panel-label"></div>
+                <div class="trainer-averages-grid">
+                    <div class="trainer-average-card">
+                        <span class="trainer-average-label">AO3</span>
+                        <strong id="trainer-ao3" class="trainer-average-value">--</strong>
+                    </div>
+                    <div class="trainer-average-card">
+                        <span class="trainer-average-label">AO5</span>
+                        <strong id="trainer-ao5" class="trainer-average-value">--</strong>
+                    </div>
+                    <div class="trainer-average-card">
+                        <span class="trainer-average-label">AO12</span>
+                        <strong id="trainer-ao12" class="trainer-average-value">--</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="trainer-history-shell">
+                <div id="trainer-history-label" class="trainer-panel-label"></div>
+                <div id="trainer-history-list" class="trainer-history-list"></div>
+            </div>
+        </div>
+
+        <div id="view-settings" class="view-section">
+            <div class="control-panel">
+                <h3 data-i18n="settingsTitle">Settings</h3>
+                <p class="subtitle" data-i18n="settingsSubtitle">Manage library preferences, language, backup, and reset here, matching Blindfolded Letter Pairs.</p>
+            </div>
+
+            <div class="settings-stack">
+                <section class="settings-card settings-info-card">
+                    <div class="settings-card-header">
+                        <h4 data-i18n="settingsFormulaTitle">Algorithm Data</h4>
+                        <p data-i18n="settingsFormulaDescription">Built-in cases keep your learning state and custom algs. Edit any single case back in the list view.</p>
+                    </div>
+                    <div id="settings-formula-details" class="settings-detail-text"></div>
+                </section>
+
+                <section class="settings-card settings-action-card">
+                    <div class="settings-card-header">
+                        <h4 data-i18n="settingsLanguageTitle">Language</h4>
+                        <p data-i18n="settingsLanguageDescription">This keeps the language toggle from Blindfolded Letter Pairs, minus lettering scheme.</p>
+                    </div>
+                    <div class="settings-inline-row">
+                        <span id="settings-language-current" class="settings-detail-text"></span>
+                        <button type="button" class="action-btn" onclick="toggleLanguage()" id="toggle-language-btn"></button>
+                    </div>
+                </section>
+
+                <section class="settings-card backup-container">
+                    <div class="settings-card-header">
+                        <h4 data-i18n="settingsBackupTitle">Backup &amp; Import</h4>
+                        <p data-i18n="settingsBackupDescription">Export your current progress and custom algorithms, or restore from a backup.</p>
+                    </div>
+                    <div class="settings-form-row">
+                        <label class="filter-label" for="export-type" data-i18n="settingsExportTypeLabel">Export Format</label>
+                        <div class="settings-inline-row">
+                            <div class="styled-select-wrapper">
+                                <select id="export-type" class="styled-select"></select>
+                            </div>
+                            <button type="button" class="action-btn btn-export" onclick="exportData()" data-i18n="settingsExportButton">Export Data</button>
+                        </div>
+                    </div>
+                    <div class="settings-form-row">
+                        <label class="filter-label" for="import-file-input" data-i18n="settingsImportLabel">Import Backup</label>
+                        <div class="settings-inline-row settings-inline-wrap">
+                            <label class="action-btn file-input-trigger" for="import-file-input" data-i18n="settingsChooseFile">Choose File</label>
+                            <input id="import-file-input" class="hidden-file-input" type="file" accept=".json,application/json">
+                            <span id="import-file-name" class="settings-file-name"></span>
+                            <button type="button" class="action-btn" onclick="importData()" data-i18n="settingsImportButton">Import Data</button>
+                        </div>
+                        <p class="settings-inline-hint" data-i18n="settingsImportHint">JSON backups are supported for import right now.</p>
+                    </div>
+                </section>
+
+                <section class="settings-card danger-zone">
+                    <div class="settings-card-header">
+                        <h4 data-i18n="settingsDangerTitle">Danger Zone</h4>
+                        <p data-i18n="settingsDangerDescription">Clear all learning states, custom algorithms, trainer ranges, and language preference.</p>
+                    </div>
+                    <button type="button" class="action-btn danger-btn" onclick="clearAllData()" data-i18n="settingsClearButton">Clear All Data</button>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script src="algorithm-db.js"></script>
+    <script src="zbll-speedcubedb-db.js"></script>
+    <script src="zbll-db.js"></script>
+    <script src="speedcubedb-puzzleGen.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/cube.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/solve.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
