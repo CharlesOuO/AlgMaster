@@ -6,8 +6,12 @@ const UI_PREFERENCES_KEY = "algmaster_ui_preferences_v1";
 const TRAINER_CASE_SELECTIONS_KEY = "algmaster_trainer_case_selections_v1";
 const TRAINER_SOLVE_HISTORY_KEY = "algmaster_trainer_solve_history_v1";
 const APP_LANGUAGE_KEY = "algmaster_language_v1";
+const GOOGLE_DRIVE_CLIENT_ID_KEY = "algmaster_google_drive_client_id_v1";
 const TRAINER_CUBE_SOLVER_MAX_DEPTH = 22;
 const TRAINER_SOLVE_HISTORY_LIMIT = 100;
+const GOOGLE_DRIVE_BACKUP_FILE_NAME = "algmaster-backup.json";
+const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+const GOOGLE_DRIVE_DISCOVERY_POLL_LIMIT = 40;
 const TRAINER_STATUS_FILTER_OPTIONS = Object.freeze(["learned", "learning", "unlearned"]);
 const TRAINER_ACTION_ICONS = Object.freeze({
     plus2: "◷",
@@ -113,6 +117,35 @@ const APP_TRANSLATIONS = {
         importNeedFile: "請先選擇一個 JSON 備份檔。",
         importInvalid: "匯入失敗，這個檔案不是有效的 AlgMaster 備份。",
         importSuccess: "匯入完成，已套用備份資料。",
+        settingsLocalBackupTitle: "\u672c\u5730\u5099\u4efd",
+        settingsLocalBackupDescription: "\u532f\u51fa JSON \u5099\u4efd\u5230\u9019\u53f0\u88dd\u7f6e\uff0c\u6216\u5f9e\u672c\u5730\u6a94\u6848\u9084\u539f\u3002",
+        settingsCloudBackupTitle: "\u96f2\u7aef\u5099\u4efd",
+        settingsCloudBackupDescription: "\u5148\u7528 Google \u767b\u5165\uff0c\u518d\u5099\u4efd\u5230 Drive \u6216\u9084\u539f\u6700\u65b0\u96f2\u7aef\u8cc7\u6599\u3002",
+        settingsGoogleClientIdLabel: "\u0047\u006f\u006f\u0067\u006c\u0065\u0020\u0043\u006c\u0069\u0065\u006e\u0074\u0020\u0049\u0044",
+        settingsGoogleClientIdSave: "\u5132\u5b58",
+        settingsGoogleClientIdHint: "\u5148\u5230 Google Cloud Console \u5efa\u7acb Web OAuth Client\uff0c\u518d\u5c07 Client ID \u8cbc\u4e0a\u4f86\u3002",
+        settingsGoogleAccountLabel: "\u0047\u006f\u006f\u0067\u006c\u0065\u0020\u5e33\u865f",
+        settingsGoogleSignIn: "\u4f7f\u7528 Google \u767b\u5165",
+        settingsGoogleSignOut: "\u767b\u51fa",
+        settingsCloudBackupLabel: "\u0047\u006f\u006f\u0067\u006c\u0065\u0020\u0044\u0072\u0069\u0076\u0065\u0020\u96f2\u7aef\u5099\u4efd",
+        settingsGoogleBackupButton: "\u5099\u4efd\u5230 Drive",
+        settingsGoogleRestoreButton: "\u5f9e Drive \u9084\u539f",
+        googleDriveClientIdSaved: "Google Client ID \u5df2\u5132\u5b58\u3002",
+        googleDriveClientIdMissing: "\u8acb\u5148\u8f38\u5165 Google Client ID\u3002",
+        googleDriveReady: "\u5c31\u7dd2\uff1a\u53ef\u4f7f\u7528 Google \u767b\u5165",
+        googleDriveConnected: "\u5df2\u9023\u7dda Google Drive",
+        googleDriveBackupSuccess: "\u96f2\u7aef\u5099\u4efd\u5b8c\u6210\u3002",
+        googleDriveRestoreSuccess: "\u5df2\u5f9e\u96f2\u7aef\u9084\u539f\u8cc7\u6599\u3002",
+        googleDriveNoBackupFound: "\u96f2\u7aef\u627e\u4e0d\u5230 AlgMaster \u5099\u4efd\u6a94\u3002",
+        googleDriveActionFailed: "\u0047\u006f\u006f\u0067\u006c\u0065\u0020\u0044\u0072\u0069\u0076\u0065 \u64cd\u4f5c\u5931\u6557\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002",
+        googleDriveStatusNotConfigured: "\u672a\u8a2d\u5b9a Google Client ID",
+        googleDriveStatusDisconnected: "\u672a\u9023\u7dda",
+        googleDriveStatusConnected: "\u5df2\u9023\u7dda",
+        googleDriveStatusLastBackup: "\u4e0a\u6b21\u96f2\u7aef\u5099\u4efd\uff1a{time}",
+        googleDriveStatusNoBackup: "\u5c1a\u7121\u96f2\u7aef\u5099\u4efd",
+        googleDriveConfigGuide: "\u9700\u8981\uff1aGoogle Drive API + Web OAuth client",
+        googleDriveSignedInAs: "\u767b\u5165\u5e33\u865f\uff1a{name} <{email}>",
+        googleDriveSignedOut: "\u5c1a\u672a\u767b\u5165 Google \u5e33\u865f",
         exportFilePrefix: "algmaster-backup",
         csvFilePrefix: "algmaster-algorithms",
         languageNameZhTW: "繁體中文",
@@ -158,6 +191,10 @@ const APP_TRANSLATIONS = {
         settingsLanguageToggleGroupLabel: "Language switcher",
         settingsBackupTitle: "Backup & Import",
         settingsBackupDescription: "Export your current progress and custom algorithms, or restore from a backup.",
+        settingsLocalBackupTitle: "Local Backup",
+        settingsLocalBackupDescription: "Export a JSON backup to this device or restore from a local file.",
+        settingsCloudBackupTitle: "Cloud Backup",
+        settingsCloudBackupDescription: "Sign in with Google, then back up to Drive or restore your latest cloud save.",
         settingsExportTypeLabel: "Export Format",
         settingsExportJson: "JSON Backup",
         settingsExportCsv: "CSV List",
@@ -168,6 +205,15 @@ const APP_TRANSLATIONS = {
         settingsImportHint: "JSON backups are supported for import right now.",
         settingsNoFileChosen: "No file chosen",
         settingsSelectedFile: "Selected: {name}",
+        settingsGoogleClientIdLabel: "Google Client ID",
+        settingsGoogleClientIdSave: "Save",
+        settingsGoogleClientIdHint: "Create a Web OAuth client in Google Cloud Console and paste the Client ID here.",
+        settingsGoogleAccountLabel: "Google Account",
+        settingsGoogleSignIn: "Sign in with Google",
+        settingsGoogleSignOut: "Sign Out",
+        settingsCloudBackupLabel: "Google Drive Backup",
+        settingsGoogleBackupButton: "Backup To Drive",
+        settingsGoogleRestoreButton: "Restore From Drive",
         settingsDangerTitle: "Danger Zone",
         settingsDangerDescription: "Clear all learning states, custom algorithms, trainer ranges, and language preference.",
         settingsClearButton: "Clear All Data",
@@ -175,6 +221,22 @@ const APP_TRANSLATIONS = {
         importNeedFile: "Please choose a JSON backup file first.",
         importInvalid: "Import failed. This file is not a valid AlgMaster backup.",
         importSuccess: "Import complete. Backup data has been applied.",
+        googleDriveClientIdSaved: "Google Client ID saved.",
+        googleDriveClientIdMissing: "Please enter a Google Client ID first.",
+        googleDriveReady: "Ready: you can connect Google Drive.",
+        googleDriveConnected: "Connected to Google Drive.",
+        googleDriveBackupSuccess: "Cloud backup complete.",
+        googleDriveRestoreSuccess: "Cloud backup restored.",
+        googleDriveNoBackupFound: "No AlgMaster backup file was found in Google Drive.",
+        googleDriveActionFailed: "Google Drive action failed. Please try again.",
+        googleDriveStatusNotConfigured: "Google Client ID not configured",
+        googleDriveStatusDisconnected: "Not connected",
+        googleDriveStatusConnected: "Connected",
+        googleDriveStatusLastBackup: "Last cloud backup: {time}",
+        googleDriveStatusNoBackup: "No cloud backup yet",
+        googleDriveConfigGuide: "Required: Google Drive API + Web OAuth client",
+        googleDriveSignedInAs: "Signed in as: {name} <{email}>",
+        googleDriveSignedOut: "Not signed in to Google",
         exportFilePrefix: "algmaster-backup",
         csvFilePrefix: "algmaster-algorithms",
         languageNameZhTW: "Traditional Chinese",
@@ -188,6 +250,12 @@ let trainerStartTimestamp = 0;
 let trainerAnimationFrameId = null;
 let expandedTrainerHistoryRecordId = null;
 let trainerHistoryDeleteConfirmRecordId = null;
+let googleDriveTokenClient = null;
+let googleDriveTokenClientId = "";
+let googleDriveAccessToken = "";
+let googleDriveStatusMessage = "";
+let googleDriveLastBackupMeta = null;
+let googleDriveUserProfile = null;
 
 function readStoredJson(key, fallbackValue) {
     try {
@@ -195,6 +263,18 @@ function readStoredJson(key, fallbackValue) {
     } catch (error) {
         return fallbackValue;
     }
+}
+
+function getStoredGoogleDriveClientId() {
+    try {
+        return String(localStorage.getItem(GOOGLE_DRIVE_CLIENT_ID_KEY) || "").trim();
+    } catch (error) {
+        return "";
+    }
+}
+
+function setStoredGoogleDriveClientId(clientId) {
+    localStorage.setItem(GOOGLE_DRIVE_CLIENT_ID_KEY, String(clientId || "").trim());
 }
 
 function normalizeAppLanguage(language) {
@@ -616,9 +696,25 @@ function getZbllPllStyleImageUrl(speedCubeDbFaces = {}) {
     return imageUrl;
 }
 
+function getCuberProZbllImageUrl(algo) {
+    if (!algo || algo.category !== "zbll") return "";
+
+    const group = String(algo.group || "").trim();
+    const caseNumberMatch = String(algo.name || "").match(/(\d+)\s*$/);
+    const caseNumber = Number(caseNumberMatch?.[1] || NaN);
+    const groupEntries = window.ZBLL_CUBERPRO_FD_DB?.[group];
+    if (!Array.isArray(groupEntries) || !Number.isInteger(caseNumber) || caseNumber < 1) return "";
+
+    const fd = String(groupEntries[caseNumber - 1] || "").trim();
+    if (!fd) return "";
+
+    return `https://algs.cuber.pro/visualcube/visualcube.php?size=150&view=plan&fmt=png&pzl=3&bg=t&fd=${encodeURIComponent(fd)}`;
+}
+
 function getAlgoImageSources(algo) {
     if (algo.imagePath) return { src: algo.imagePath, fallbackSrc: "" };
 
+    const cuberProZbllImageUrl = getCuberProZbllImageUrl(algo);
     const zbllPllStyleImageUrl = algo.category === "zbll" && algo.speedCubeDbFaces
         ? getZbllPllStyleImageUrl(algo.speedCubeDbFaces)
         : "";
@@ -631,6 +727,13 @@ function getAlgoImageSources(algo) {
     const casePatternImageUrl = algo.casePattern
         ? getCasePatternImageUrl(algo.casePattern)
         : "";
+
+    if (cuberProZbllImageUrl) {
+        return {
+            src: cuberProZbllImageUrl,
+            fallbackSrc: zbllPllStyleImageUrl || speedCubeDbPuzzleGenImageUrl || speedCubeDbImageUrl || casePatternImageUrl || ""
+        };
+    }
 
     if (zbllPllStyleImageUrl) {
         return {
@@ -812,6 +915,199 @@ function updateImportFileLabel() {
         : t("settingsNoFileChosen");
 }
 
+function setGoogleDriveStatusMessage(message = "") {
+    googleDriveStatusMessage = String(message || "").trim();
+    renderSettingsView();
+}
+
+function isGoogleSignedIn() {
+    return !!googleDriveAccessToken;
+}
+
+function formatGoogleDriveBackupTime(timestamp) {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "";
+
+    try {
+        return new Intl.DateTimeFormat(currentLanguage === "en" ? "en-US" : "zh-TW", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit"
+        }).format(date);
+    } catch (error) {
+        return date.toLocaleString();
+    }
+}
+
+function getGoogleDriveStatusLines() {
+    const lines = [];
+    const storedClientId = getStoredGoogleDriveClientId();
+
+    lines.push(`${t("settingsGoogleClientIdLabel")}: ${storedClientId ? "OK" : t("googleDriveStatusNotConfigured")}`);
+    lines.push(`${t("settingsCloudBackupLabel")}: ${googleDriveAccessToken ? t("googleDriveStatusConnected") : t("googleDriveStatusDisconnected")}`);
+
+    if (googleDriveLastBackupMeta?.modifiedTime) {
+        lines.push(t("googleDriveStatusLastBackup", { time: formatGoogleDriveBackupTime(googleDriveLastBackupMeta.modifiedTime) }));
+    } else {
+        lines.push(t("googleDriveStatusNoBackup"));
+    }
+
+    lines.push(t("googleDriveConfigGuide"));
+
+    if (googleDriveStatusMessage) {
+        lines.push(googleDriveStatusMessage);
+    }
+
+    return lines;
+}
+
+function getGoogleAccountSummaryLines() {
+    const lines = [];
+    if (googleDriveUserProfile?.email) {
+        lines.push(t("googleDriveSignedInAs", {
+            name: googleDriveUserProfile.name || googleDriveUserProfile.email,
+            email: googleDriveUserProfile.email
+        }));
+    } else {
+        lines.push(t("googleDriveSignedOut"));
+    }
+
+    return lines;
+}
+
+function waitForGoogleIdentityServices() {
+    if (window.google?.accounts?.oauth2) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+        let attempts = 0;
+        const timer = window.setInterval(() => {
+            attempts += 1;
+            if (window.google?.accounts?.oauth2) {
+                window.clearInterval(timer);
+                resolve();
+                return;
+            }
+            if (attempts >= GOOGLE_DRIVE_DISCOVERY_POLL_LIMIT) {
+                window.clearInterval(timer);
+                reject(new Error("Google Identity Services not available"));
+            }
+        }, 250);
+    });
+}
+
+function ensureGoogleDriveTokenClient() {
+    const clientId = getStoredGoogleDriveClientId();
+    if (!clientId) {
+        throw new Error("Missing Google Client ID");
+    }
+
+    if (googleDriveTokenClient && googleDriveTokenClientId === clientId) {
+        return googleDriveTokenClient;
+    }
+
+    googleDriveTokenClientId = clientId;
+    googleDriveTokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: GOOGLE_DRIVE_SCOPE,
+        callback: () => {}
+    });
+    googleDriveAccessToken = "";
+
+    return googleDriveTokenClient;
+}
+
+function requestGoogleDriveAccessToken({ interactive = true } = {}) {
+    return waitForGoogleIdentityServices().then(() => {
+        const tokenClient = ensureGoogleDriveTokenClient();
+        return new Promise((resolve, reject) => {
+            tokenClient.callback = (response) => {
+                if (response?.error) {
+                    reject(new Error(response.error));
+                    return;
+                }
+                googleDriveAccessToken = String(response?.access_token || "").trim();
+                resolve(googleDriveAccessToken);
+            };
+
+            tokenClient.requestAccessToken({
+                prompt: interactive || !googleDriveAccessToken ? "consent" : "",
+                hint: ""
+            });
+        });
+    });
+}
+
+async function googleDriveFetch(url, options = {}) {
+    const accessToken = googleDriveAccessToken || await requestGoogleDriveAccessToken({ interactive: true });
+    const headers = new Headers(options.headers || {});
+    headers.set("Authorization", `Bearer ${accessToken}`);
+
+    const response = await fetch(url, { ...options, headers });
+    if (!response.ok) {
+        throw new Error(`Drive API ${response.status}`);
+    }
+    return response;
+}
+
+async function fetchGoogleDriveUserProfile() {
+    const response = await googleDriveFetch("https://www.googleapis.com/oauth2/v3/userinfo");
+    googleDriveUserProfile = await response.json();
+    return googleDriveUserProfile;
+}
+
+async function getGoogleDriveBackupFileMeta() {
+    const query = encodeURIComponent(`name='${GOOGLE_DRIVE_BACKUP_FILE_NAME}' and 'appDataFolder' in parents and trashed=false`);
+    const response = await googleDriveFetch(`https://www.googleapis.com/drive/v3/files?q=${query}&spaces=appDataFolder&fields=files(id,name,modifiedTime,size)&pageSize=1&orderBy=modifiedTime desc`);
+    const payload = await response.json();
+    const fileMeta = Array.isArray(payload.files) ? payload.files[0] || null : null;
+    googleDriveLastBackupMeta = fileMeta;
+    return fileMeta;
+}
+
+async function uploadGoogleDriveBackup(content) {
+    const existingFile = await getGoogleDriveBackupFileMeta();
+    const metadata = existingFile
+        ? { name: GOOGLE_DRIVE_BACKUP_FILE_NAME }
+        : { name: GOOGLE_DRIVE_BACKUP_FILE_NAME, parents: ["appDataFolder"] };
+    const boundary = `algmaster-${Date.now()}`;
+    const multipartBody =
+        `--${boundary}\r\n` +
+        "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+        `${JSON.stringify(metadata)}\r\n` +
+        `--${boundary}\r\n` +
+        "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+        `${content}\r\n` +
+        `--${boundary}--`;
+
+    const method = existingFile ? "PATCH" : "POST";
+    const endpoint = existingFile
+        ? `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=multipart&fields=id,name,modifiedTime,size`
+        : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime,size";
+
+    const response = await googleDriveFetch(endpoint, {
+        method,
+        headers: {
+            "Content-Type": `multipart/related; boundary=${boundary}`
+        },
+        body: multipartBody
+    });
+    googleDriveLastBackupMeta = await response.json();
+    return googleDriveLastBackupMeta;
+}
+
+async function downloadGoogleDriveBackup() {
+    const fileMeta = await getGoogleDriveBackupFileMeta();
+    if (!fileMeta?.id) return null;
+
+    const response = await googleDriveFetch(`https://www.googleapis.com/drive/v3/files/${fileMeta.id}?alt=media`);
+    return response.text();
+}
+
 function renderSettingsView() {
     const formulaDetailsElement = document.getElementById("settings-formula-details");
     const languageCurrentElement = document.getElementById("settings-language-current");
@@ -819,6 +1115,13 @@ function renderSettingsView() {
     const toggleLanguageZhButton = document.getElementById("toggle-language-zh");
     const toggleLanguageEnButton = document.getElementById("toggle-language-en");
     const exportTypeSelect = document.getElementById("export-type");
+    const googleClientIdInput = document.getElementById("google-client-id-input");
+    const googleDriveStatusElement = document.getElementById("google-drive-status");
+    const googleAccountSummaryElement = document.getElementById("google-account-summary");
+    const googleSignInButton = document.getElementById("google-signin-btn");
+    const googleSignOutButton = document.getElementById("google-signout-btn");
+    const googleDriveBackupButton = document.getElementById("google-drive-backup-btn");
+    const googleDriveRestoreButton = document.getElementById("google-drive-restore-btn");
 
     if (formulaDetailsElement) {
         formulaDetailsElement.innerHTML = `
@@ -861,6 +1164,39 @@ function renderSettingsView() {
             optionElement.selected = currentValue === option.value;
             exportTypeSelect.appendChild(optionElement);
         });
+    }
+
+    if (googleClientIdInput && document.activeElement !== googleClientIdInput) {
+        googleClientIdInput.value = getStoredGoogleDriveClientId();
+    }
+
+    if (googleDriveStatusElement) {
+        googleDriveStatusElement.textContent = getGoogleDriveStatusLines().join("\n");
+    }
+
+    if (googleAccountSummaryElement) {
+        googleAccountSummaryElement.textContent = getGoogleAccountSummaryLines().join("\n");
+    }
+
+    if (googleSignInButton) {
+        const disabled = !getStoredGoogleDriveClientId();
+        googleSignInButton.disabled = disabled || isGoogleSignedIn();
+        googleSignInButton.classList.toggle("is-disabled", googleSignInButton.disabled);
+    }
+
+    if (googleSignOutButton) {
+        googleSignOutButton.disabled = !isGoogleSignedIn();
+        googleSignOutButton.classList.toggle("is-disabled", googleSignOutButton.disabled);
+    }
+
+    if (googleDriveBackupButton) {
+        googleDriveBackupButton.disabled = !isGoogleSignedIn();
+        googleDriveBackupButton.classList.toggle("is-disabled", googleDriveBackupButton.disabled);
+    }
+
+    if (googleDriveRestoreButton) {
+        googleDriveRestoreButton.disabled = !isGoogleSignedIn();
+        googleDriveRestoreButton.classList.toggle("is-disabled", googleDriveRestoreButton.disabled);
     }
 
     updateImportFileLabel();
@@ -954,6 +1290,75 @@ function exportData() {
     );
 }
 
+function saveGoogleDriveClientId() {
+    const inputElement = document.getElementById("google-client-id-input");
+    const clientId = String(inputElement?.value || "").trim();
+    if (!clientId) {
+        alert(t("googleDriveClientIdMissing"));
+        return;
+    }
+
+    setStoredGoogleDriveClientId(clientId);
+    googleDriveTokenClient = null;
+    googleDriveTokenClientId = "";
+    googleDriveAccessToken = "";
+    googleDriveUserProfile = null;
+    setGoogleDriveStatusMessage(t("googleDriveClientIdSaved"));
+}
+
+async function signInWithGoogle() {
+    try {
+        if (!getStoredGoogleDriveClientId()) {
+            alert(t("googleDriveClientIdMissing"));
+            return;
+        }
+
+        setGoogleDriveStatusMessage(t("googleDriveReady"));
+        await requestGoogleDriveAccessToken({ interactive: true });
+        await fetchGoogleDriveUserProfile();
+        await getGoogleDriveBackupFileMeta();
+        setGoogleDriveStatusMessage(t("googleDriveConnected"));
+    } catch (error) {
+        setGoogleDriveStatusMessage(t("googleDriveActionFailed"));
+        alert(t("googleDriveActionFailed"));
+    }
+}
+
+function signOutGoogle() {
+    if (googleDriveAccessToken && window.google?.accounts?.oauth2?.revoke) {
+        try {
+            window.google.accounts.oauth2.revoke(googleDriveAccessToken, () => {});
+        } catch (error) {
+            // Ignore revoke errors and still clear local session state.
+        }
+    }
+
+    googleDriveAccessToken = "";
+    googleDriveUserProfile = null;
+    setGoogleDriveStatusMessage("");
+}
+
+async function backupToGoogleDrive() {
+    try {
+        if (!getStoredGoogleDriveClientId()) {
+            alert(t("googleDriveClientIdMissing"));
+            return;
+        }
+
+        await requestGoogleDriveAccessToken({ interactive: !isGoogleSignedIn() });
+        if (!googleDriveUserProfile) {
+            await fetchGoogleDriveUserProfile();
+        }
+        const exportPayload = JSON.stringify(buildExportPayload(), null, 2);
+        await uploadGoogleDriveBackup(exportPayload);
+        setGoogleDriveStatusMessage(t("googleDriveBackupSuccess"));
+        alert(t("googleDriveBackupSuccess"));
+    } catch (error) {
+        setGoogleDriveStatusMessage(t("googleDriveActionFailed"));
+        alert(t("googleDriveActionFailed"));
+    }
+}
+
 function extractImportPayload(parsedContent) {
     if (!parsedContent || typeof parsedContent !== "object") return null;
 
@@ -1020,6 +1425,50 @@ function importData() {
     };
 
     reader.readAsText(selectedFile, "utf-8");
+}
+
+async function restoreFromGoogleDrive() {
+    try {
+        if (!getStoredGoogleDriveClientId()) {
+            alert(t("googleDriveClientIdMissing"));
+            return;
+        }
+
+        await requestGoogleDriveAccessToken({ interactive: !isGoogleSignedIn() });
+        if (!googleDriveUserProfile) {
+            await fetchGoogleDriveUserProfile();
+        }
+        const rawContent = await downloadGoogleDriveBackup();
+        if (!rawContent) {
+            alert(t("googleDriveNoBackupFound"));
+            return;
+        }
+
+        const parsedContent = JSON.parse(rawContent);
+        const importPayload = extractImportPayload(parsedContent);
+        if (!importPayload) {
+            throw new Error("Invalid payload");
+        }
+
+        applyImportedState(importPayload);
+        initUiPreferences();
+        applyStaticTranslations();
+        renderCategorySelect("list-type-select", currentListCategory, setListAlgorithmCategory);
+        renderCategorySelect("trainer-type-select", currentTrainerCategory, setTrainerAlgorithmCategory);
+        renderSubtypeSelect("list-subtype-filter", "list-subtype-select", currentListCategory, currentListSubtype, setListAlgorithmSubtype);
+        renderSubtypeSelect("trainer-subtype-filter", "trainer-subtype-select", currentTrainerCategory, currentTrainerSubtype, setTrainerAlgorithmSubtype);
+        renderAlgoList();
+        renderTrainerCasePicker();
+        renderSettingsView();
+        renderTrainerHistory();
+        resetTrainerState(t("trainerWaitingStatus"));
+        generateNextScramble();
+        setGoogleDriveStatusMessage(t("googleDriveRestoreSuccess"));
+        alert(t("googleDriveRestoreSuccess"));
+    } catch (error) {
+        setGoogleDriveStatusMessage(t("googleDriveActionFailed"));
+        alert(t("googleDriveActionFailed"));
+    }
 }
 
 function clearAllData() {
@@ -1630,6 +2079,16 @@ function bindSettingsEvents() {
     const importFileInput = document.getElementById("import-file-input");
     if (importFileInput) {
         importFileInput.addEventListener("change", updateImportFileLabel);
+    }
+
+    const googleClientIdInput = document.getElementById("google-client-id-input");
+    if (googleClientIdInput) {
+        googleClientIdInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                saveGoogleDriveClientId();
+            }
+        });
     }
 }
 
