@@ -1907,7 +1907,7 @@ function findTrainerHistoryRecord(recordId = "") {
 }
 
 function getLatestTrainerSolveRecord() {
-    const historyEntries = getTrainerScopedHistoryEntries();
+    const historyEntries = getTrainerSolveHistory();
     return historyEntries[historyEntries.length - 1] || null;
 }
 
@@ -2056,14 +2056,12 @@ function renderTrainerHistory() {
 
     if (!historyListElement || !ao3Element || !ao5Element || !ao12Element) return;
 
-    const historyGroups = getTrainerScopedHistoryGroups();
-    const historyEntries = historyGroups.flatMap(({ entries }) => entries);
-    const latestRecord = getLatestTrainerSolveRecord();
-    const latestRecordCaseId = String(latestRecord?.caseId || "");
-    const focusEntries = latestRecordCaseId ? getTrainerSolveHistory(latestRecordCaseId) : [];
-    const ao3 = calculateTrainerAverage(focusEntries, 3);
-    const ao5 = calculateTrainerAverage(focusEntries, 5);
-    const ao12 = calculateTrainerAverage(focusEntries, 12);
+    const historyEntries = getTrainerSolveHistory();
+    const recentEntries = historyEntries.slice().reverse();
+    const latestRecord = historyEntries[historyEntries.length - 1] || null;
+    const ao3 = calculateTrainerAverage(historyEntries, 3);
+    const ao5 = calculateTrainerAverage(historyEntries, 5);
+    const ao12 = calculateTrainerAverage(historyEntries, 12);
 
     if (expandedTrainerHistoryRecordId && !historyEntries.some((entry) => entry.id === expandedTrainerHistoryRecordId)) {
         expandedTrainerHistoryRecordId = null;
@@ -2075,7 +2073,7 @@ function renderTrainerHistory() {
     updateTrainerPenaltyControls(latestRecord);
 
     historyListElement.innerHTML = "";
-    if (historyGroups.length === 0) {
+    if (recentEntries.length === 0) {
         const emptyElement = document.createElement("div");
         emptyElement.className = "trainer-history-empty";
         emptyElement.textContent = getTrainerHistoryEmptyText();
@@ -2083,123 +2081,112 @@ function renderTrainerHistory() {
     } else {
         const historyFragment = document.createDocumentFragment();
 
-        historyGroups.forEach(({ algo, entries }) => {
-            const groupElement = document.createElement("section");
-
-            const groupLabelElement = document.createElement("div");
-            groupLabelElement.className = "trainer-history-detail-label";
-            groupLabelElement.textContent = `${getAlgoBadgeLabel(algo)} / ${getAlgoDisplayName(algo)}`;
-            groupElement.appendChild(groupLabelElement);
-
-            entries.slice().reverse().forEach((entry, index) => {
-                const isExpanded = entry.id === expandedTrainerHistoryRecordId;
-                const isDeleteConfirming = trainerHistoryDeleteConfirmRecordId === entry.id;
-                const itemElement = document.createElement("div");
-                itemElement.className = `trainer-history-item${index === 0 ? " is-latest" : ""}${isExpanded ? " is-expanded" : ""}`;
-                itemElement.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                    toggleTrainerRecordExpanded(entry.id);
-                });
-
-                const headElement = document.createElement("div");
-                headElement.className = "trainer-history-head";
-
-                const timeElement = document.createElement("div");
-                timeElement.className = "trainer-history-time";
-                timeElement.textContent = getTrainerDisplayTime(entry);
-
-                const metaElement = document.createElement("div");
-                metaElement.className = "trainer-history-meta";
-                metaElement.textContent = getTrainerHistoryEntryMeta(entry);
-
-                headElement.appendChild(timeElement);
-                headElement.appendChild(metaElement);
-                itemElement.appendChild(headElement);
-
-                if (isExpanded) {
-                    const detailsElement = document.createElement("div");
-                    detailsElement.className = "trainer-history-details";
-
-                    const scrambleLabelElement = document.createElement("div");
-                    scrambleLabelElement.className = "trainer-history-detail-label";
-                    scrambleLabelElement.textContent = getTrainerScrambleLabelText();
-
-                    const scrambleValueElement = document.createElement("div");
-                    scrambleValueElement.className = "trainer-history-detail-value";
-                    scrambleValueElement.textContent = entry.scrambleText || "--";
-
-                    const algorithmLabelElement = document.createElement("div");
-                    algorithmLabelElement.className = "trainer-history-detail-label";
-                    algorithmLabelElement.textContent = getTrainerAlgorithmLabelText();
-
-                    const algorithmValueElement = document.createElement("div");
-                    algorithmValueElement.className = "trainer-history-detail-value";
-                    algorithmValueElement.textContent = entry.algorithmText || "--";
-
-                    const actionRowElement = document.createElement("div");
-                    actionRowElement.className = "trainer-history-action-row";
-
-                    const plus2Button = document.createElement("button");
-                    plus2Button.type = "button";
-                    plus2Button.className = "action-btn trainer-history-action-btn trainer-icon-btn";
-                    setTrainerActionButtonIcon(plus2Button, TRAINER_ACTION_ICONS.plus2, "+2");
-                    setTrainerActionButtonActive(plus2Button, entry.penalty === "plus2");
-                    plus2Button.addEventListener("click", (event) => {
-                        event.stopPropagation();
-                        toggleTrainerPenalty("plus2", entry.id);
-                    });
-
-                    const dnfButton = document.createElement("button");
-                    dnfButton.type = "button";
-                    dnfButton.className = "action-btn trainer-history-action-btn trainer-icon-btn";
-                    setTrainerActionButtonIcon(dnfButton, TRAINER_ACTION_ICONS.dnf, "DNF");
-                    setTrainerActionButtonActive(dnfButton, entry.penalty === "dnf");
-                    dnfButton.addEventListener("click", (event) => {
-                        event.stopPropagation();
-                        toggleTrainerPenalty("dnf", entry.id);
-                    });
-
-                    const deleteButton = document.createElement("button");
-                    deleteButton.type = "button";
-                    deleteButton.className = "action-btn trainer-history-action-btn trainer-delete-btn trainer-icon-btn";
-                    setTrainerActionButtonIcon(
-                        deleteButton,
-                        isDeleteConfirming ? TRAINER_ACTION_ICONS.cancel : TRAINER_ACTION_ICONS.delete,
-                        isDeleteConfirming ? getTrainerDeleteCancelLabelText() : getTrainerDeleteLabelText()
-                    );
-                    deleteButton.classList.toggle("is-armed", isDeleteConfirming);
-                    setTrainerActionButtonActive(deleteButton, isDeleteConfirming);
-                    deleteButton.addEventListener("click", (event) => {
-                        event.stopPropagation();
-                        toggleTrainerHistoryDeleteConfirm(entry.id);
-                    });
-
-                    const confirmButton = document.createElement("button");
-                    confirmButton.type = "button";
-                    confirmButton.className = `action-btn trainer-history-action-btn trainer-delete-confirm-btn trainer-icon-btn${isDeleteConfirming ? "" : " hidden"}`;
-                    setTrainerActionButtonIcon(confirmButton, TRAINER_ACTION_ICONS.confirm, getTrainerDeleteConfirmLabelText());
-                    confirmButton.addEventListener("click", (event) => {
-                        event.stopPropagation();
-                        confirmDeleteTrainerRecord(entry.id);
-                    });
-
-                    actionRowElement.appendChild(plus2Button);
-                    actionRowElement.appendChild(dnfButton);
-                    actionRowElement.appendChild(deleteButton);
-                    actionRowElement.appendChild(confirmButton);
-
-                    detailsElement.appendChild(scrambleLabelElement);
-                    detailsElement.appendChild(scrambleValueElement);
-                    detailsElement.appendChild(algorithmLabelElement);
-                    detailsElement.appendChild(algorithmValueElement);
-                    detailsElement.appendChild(actionRowElement);
-                    itemElement.appendChild(detailsElement);
-                }
-
-                groupElement.appendChild(itemElement);
+        recentEntries.forEach((entry, index) => {
+            const isExpanded = entry.id === expandedTrainerHistoryRecordId;
+            const isDeleteConfirming = trainerHistoryDeleteConfirmRecordId === entry.id;
+            const itemElement = document.createElement("div");
+            itemElement.className = `trainer-history-item${index === 0 ? " is-latest" : ""}${isExpanded ? " is-expanded" : ""}`;
+            itemElement.addEventListener("click", (event) => {
+                event.stopPropagation();
+                toggleTrainerRecordExpanded(entry.id);
             });
 
-            historyFragment.appendChild(groupElement);
+            const headElement = document.createElement("div");
+            headElement.className = "trainer-history-head";
+
+            const timeElement = document.createElement("div");
+            timeElement.className = "trainer-history-time";
+            timeElement.textContent = getTrainerDisplayTime(entry);
+
+            const metaElement = document.createElement("div");
+            metaElement.className = "trainer-history-meta";
+            metaElement.textContent = getTrainerHistoryEntryMeta(entry);
+
+            headElement.appendChild(timeElement);
+            headElement.appendChild(metaElement);
+            itemElement.appendChild(headElement);
+
+            if (isExpanded) {
+                const detailsElement = document.createElement("div");
+                detailsElement.className = "trainer-history-details";
+
+                const scrambleLabelElement = document.createElement("div");
+                scrambleLabelElement.className = "trainer-history-detail-label";
+                scrambleLabelElement.textContent = getTrainerScrambleLabelText();
+
+                const scrambleValueElement = document.createElement("div");
+                scrambleValueElement.className = "trainer-history-detail-value";
+                scrambleValueElement.textContent = entry.scrambleText || "--";
+
+                const algorithmLabelElement = document.createElement("div");
+                algorithmLabelElement.className = "trainer-history-detail-label";
+                algorithmLabelElement.textContent = getTrainerAlgorithmLabelText();
+
+                const algorithmValueElement = document.createElement("div");
+                algorithmValueElement.className = "trainer-history-detail-value";
+                algorithmValueElement.textContent = entry.algorithmText || "--";
+
+                const actionRowElement = document.createElement("div");
+                actionRowElement.className = "trainer-history-action-row";
+
+                const plus2Button = document.createElement("button");
+                plus2Button.type = "button";
+                plus2Button.className = "action-btn trainer-history-action-btn trainer-icon-btn";
+                setTrainerActionButtonIcon(plus2Button, TRAINER_ACTION_ICONS.plus2, "+2");
+                setTrainerActionButtonActive(plus2Button, entry.penalty === "plus2");
+                plus2Button.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    toggleTrainerPenalty("plus2", entry.id);
+                });
+
+                const dnfButton = document.createElement("button");
+                dnfButton.type = "button";
+                dnfButton.className = "action-btn trainer-history-action-btn trainer-icon-btn";
+                setTrainerActionButtonIcon(dnfButton, TRAINER_ACTION_ICONS.dnf, "DNF");
+                setTrainerActionButtonActive(dnfButton, entry.penalty === "dnf");
+                dnfButton.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    toggleTrainerPenalty("dnf", entry.id);
+                });
+
+                const deleteButton = document.createElement("button");
+                deleteButton.type = "button";
+                deleteButton.className = "action-btn trainer-history-action-btn trainer-delete-btn trainer-icon-btn";
+                setTrainerActionButtonIcon(
+                    deleteButton,
+                    isDeleteConfirming ? TRAINER_ACTION_ICONS.cancel : TRAINER_ACTION_ICONS.delete,
+                    isDeleteConfirming ? getTrainerDeleteCancelLabelText() : getTrainerDeleteLabelText()
+                );
+                deleteButton.classList.toggle("is-armed", isDeleteConfirming);
+                setTrainerActionButtonActive(deleteButton, isDeleteConfirming);
+                deleteButton.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    toggleTrainerHistoryDeleteConfirm(entry.id);
+                });
+
+                const confirmButton = document.createElement("button");
+                confirmButton.type = "button";
+                confirmButton.className = `action-btn trainer-history-action-btn trainer-delete-confirm-btn trainer-icon-btn${isDeleteConfirming ? "" : " hidden"}`;
+                setTrainerActionButtonIcon(confirmButton, TRAINER_ACTION_ICONS.confirm, getTrainerDeleteConfirmLabelText());
+                confirmButton.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    confirmDeleteTrainerRecord(entry.id);
+                });
+
+                actionRowElement.appendChild(plus2Button);
+                actionRowElement.appendChild(dnfButton);
+                actionRowElement.appendChild(deleteButton);
+                actionRowElement.appendChild(confirmButton);
+
+                detailsElement.appendChild(scrambleLabelElement);
+                detailsElement.appendChild(scrambleValueElement);
+                detailsElement.appendChild(algorithmLabelElement);
+                detailsElement.appendChild(algorithmValueElement);
+                detailsElement.appendChild(actionRowElement);
+                itemElement.appendChild(detailsElement);
+            }
+
+            historyFragment.appendChild(itemElement);
         });
 
         historyListElement.appendChild(historyFragment);
