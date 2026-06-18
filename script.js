@@ -280,59 +280,128 @@ function getTrainerCaseSelectionMap() {
     return readStoredJson(TRAINER_CASE_SELECTIONS_KEY, {});
 }
 
-function getTrainerSolveHistory() {
-    const rawHistory = readStoredJson(TRAINER_SOLVE_HISTORY_KEY, []);
-    if (!Array.isArray(rawHistory)) return [];
+function normalizeTrainerHistoryEntry(entry, index = 0) {
+    if (typeof entry === "number" && Number.isFinite(entry) && entry > 0) {
+        return {
+            id: `legacy-${index}-${Math.round(entry)}`,
+            rawTimeMs: Math.round(entry),
+            timeMs: Math.round(entry),
+            penalty: "ok",
+            caseId: "",
+            category: "",
+            subtype: "",
+            badgeLabel: "",
+            displayName: "",
+            scrambleText: "",
+            algorithmText: "",
+            recordedAt: ""
+        };
+    }
 
-    return rawHistory
-        .map((entry, index) => {
-            if (typeof entry === "number" && Number.isFinite(entry) && entry > 0) {
-                return {
-                    id: `legacy-${index}-${Math.round(entry)}`,
-                    rawTimeMs: Math.round(entry),
-                    timeMs: Math.round(entry),
-                    penalty: "ok",
-                    caseId: "",
-                    category: "",
-                    subtype: "",
-                    badgeLabel: "",
-                    displayName: "",
-                    scrambleText: "",
-                    algorithmText: "",
-                    recordedAt: ""
-                };
-            }
+    if (!entry || typeof entry !== "object") return null;
 
-            if (!entry || typeof entry !== "object") return null;
+    const rawTimeMs = Number(entry.rawTimeMs ?? entry.timeMs);
+    if (!Number.isFinite(rawTimeMs) || rawTimeMs <= 0) return null;
+    const normalizedPenalty = entry.penalty === "plus2" || entry.penalty === "dnf" ? entry.penalty : "ok";
 
-            const rawTimeMs = Number(entry.rawTimeMs ?? entry.timeMs);
-            if (!Number.isFinite(rawTimeMs) || rawTimeMs <= 0) return null;
-            const normalizedPenalty = entry.penalty === "plus2" || entry.penalty === "dnf" ? entry.penalty : "ok";
-
-            return {
-                id: String(entry.id || `legacy-${index}-${Math.round(rawTimeMs)}`),
-                rawTimeMs: Math.round(rawTimeMs),
-                timeMs: Math.round(rawTimeMs),
-                penalty: normalizedPenalty,
-                caseId: String(entry.caseId || ""),
-                category: String(entry.category || ""),
-                subtype: String(entry.subtype || ""),
-                badgeLabel: String(entry.badgeLabel || ""),
-                displayName: String(entry.displayName || ""),
-                scrambleText: String(entry.scrambleText || entry.scramble || ""),
-                algorithmText: String(entry.algorithmText || entry.algorithm || ""),
-                recordedAt: String(entry.recordedAt || "")
-            };
-        })
-        .filter(Boolean)
-        .slice(-TRAINER_SOLVE_HISTORY_LIMIT);
+    return {
+        id: String(entry.id || `legacy-${index}-${Math.round(rawTimeMs)}`),
+        rawTimeMs: Math.round(rawTimeMs),
+        timeMs: Math.round(rawTimeMs),
+        penalty: normalizedPenalty,
+        caseId: String(entry.caseId || ""),
+        category: String(entry.category || ""),
+        subtype: String(entry.subtype || ""),
+        badgeLabel: String(entry.badgeLabel || ""),
+        displayName: String(entry.displayName || ""),
+        scrambleText: String(entry.scrambleText || entry.scramble || ""),
+        algorithmText: String(entry.algorithmText || entry.algorithm || ""),
+        recordedAt: String(entry.recordedAt || "")
+    };
 }
 
-function saveTrainerSolveHistory(historyEntries = []) {
+function trimTrainerHistoryEntries(historyEntries = []) {
+    return historyEntries.slice(-TRAINER_SOLVE_HISTORY_LIMIT);
+}
+
+function getTrainerHistoryBucketKey(entry = null, fallbackKey = "") {
+    const caseId = String(entry?.caseId || fallbackKey || "").trim();
+    return caseId || "__legacy__";
+}
+
+function normalizeTrainerSolveHistoryStore(rawHistory) {
+    const historyStore = {};
+
+    if (Array.isArray(rawHistory)) {
+        rawHistory.forEach((entry, index) => {
+            const normalizedEntry = normalizeTrainerHistoryEntry(entry, index);
+            if (!normalizedEntry) return;
+            const bucketKey = getTrainerHistoryBucketKey(normalizedEntry);
+            if (!historyStore[bucketKey]) historyStore[bucketKey] = [];
+            historyStore[bucketKey].push(normalizedEntry);
+        });
+        return Object.fromEntries(
+            Object.entries(historyStore).map(([bucketKey, entries]) => [bucketKey, trimTrainerHistoryEntries(entries)])
+        );
+    }
+
+    if (!rawHistory || typeof rawHistory !== "object") return {};
+
+    Object.entries(rawHistory).forEach(([bucketKey, entries]) => {
+        if (!Array.isArray(entries)) return;
+        const normalizedEntries = entries
+            .map((entry, index) => {
+                const normalizedEntry = normalizeTrainerHistoryEntry(entry, index);
+                if (!normalizedEntry) return null;
+                return {
+                    ...normalizedEntry,
+                    caseId: String(normalizedEntry.caseId || bucketKey || "")
+                };
+            })
+            .filter(Boolean);
+
+        if (normalizedEntries.length === 0) return;
+        historyStore[bucketKey] = trimTrainerHistoryEntries(normalizedEntries);
+    });
+
+    return historyStore;
+}
+
+function getTrainerSolveHistoryStore() {
+    return normalizeTrainerSolveHistoryStore(readStoredJson(TRAINER_SOLVE_HISTORY_KEY, {}));
+}
+
+function saveTrainerSolveHistoryStore(historyStore = {}) {
     localStorage.setItem(
         TRAINER_SOLVE_HISTORY_KEY,
-        JSON.stringify(historyEntries.slice(-TRAINER_SOLVE_HISTORY_LIMIT))
+        JSON.stringify(normalizeTrainerSolveHistoryStore(historyStore))
     );
+}
+
+function getCurrentTrainerHistoryCaseId() {
+    return String(currentScrambleData?.id || "").trim();
+}
+
+function getTrainerSolveHistory(caseId = getCurrentTrainerHistoryCaseId()) {
+    const historyStore = getTrainerSolveHistoryStore();
+    const historyEntries = historyStore[String(caseId || "").trim()] || [];
+    return Array.isArray(historyEntries) ? trimTrainerHistoryEntries(historyEntries) : [];
+}
+
+function saveTrainerSolveHistory(historyEntries = [], caseId = getCurrentTrainerHistoryCaseId()) {
+    const normalizedCaseId = String(caseId || "").trim();
+    if (!normalizedCaseId) return;
+
+    const historyStore = getTrainerSolveHistoryStore();
+    const trimmedEntries = trimTrainerHistoryEntries(historyEntries);
+
+    if (trimmedEntries.length === 0) delete historyStore[normalizedCaseId];
+    else historyStore[normalizedCaseId] = trimmedEntries.map((entry) => ({
+        ...entry,
+        caseId: normalizedCaseId
+    }));
+
+    saveTrainerSolveHistoryStore(historyStore);
 }
 
 function saveUiPreferences(nextPreferences = {}) {
@@ -928,7 +997,7 @@ function triggerFileDownload(fileName, content, mimeType) {
 function buildExportPayload() {
     return {
         app: "AlgMaster",
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
         data: {
             language: currentLanguage,
@@ -936,7 +1005,7 @@ function buildExportPayload() {
             customAlgoMap: getCustomAlgoMap(),
             uiPreferences: getUiPreferences(),
             trainerCaseSelections: getTrainerCaseSelectionMap(),
-            trainerSolveHistory: getTrainerSolveHistory()
+            trainerSolveHistory: getTrainerSolveHistoryStore()
         }
     };
 }
@@ -1001,7 +1070,7 @@ function applyImportedState(importData) {
     localStorage.setItem(CUSTOM_ALGO_KEY, JSON.stringify(importData.customAlgoMap || {}));
     localStorage.setItem(UI_PREFERENCES_KEY, JSON.stringify(importData.uiPreferences || {}));
     localStorage.setItem(TRAINER_CASE_SELECTIONS_KEY, JSON.stringify(importData.trainerCaseSelections || {}));
-    saveTrainerSolveHistory(Array.isArray(importData.trainerSolveHistory) ? importData.trainerSolveHistory : []);
+    saveTrainerSolveHistoryStore(importData.trainerSolveHistory || {});
     setStoredAppLanguage(importData.language || "zh-TW");
 }
 
@@ -1534,6 +1603,11 @@ function getTrainerVisibleAlgorithms(algorithms = getAlgorithmsByCategory(curren
     return algorithms.filter((algo) => activeStatuses.has(statusMap[algo.id] || "unlearned"));
 }
 
+function getTrainerSelectedVisibleAlgorithms() {
+    const selectedCaseIds = new Set(getTrainerSelectedCaseIds(currentTrainerCategory, currentTrainerSubtype));
+    return getTrainerVisibleAlgorithms().filter((algo) => selectedCaseIds.has(algo.id));
+}
+
 function renderTrainerStatusFilterControls() {
     const shellElement = document.getElementById("trainer-status-filter-shell");
     if (!shellElement) return;
@@ -1659,9 +1733,7 @@ function bindSettingsEvents() {
 function generateNextScramble() {
     if (trainerTimerState === "running") return;
 
-    const selectedCaseIds = new Set(getTrainerSelectedCaseIds(currentTrainerCategory, currentTrainerSubtype));
-    const algorithms = getAlgorithmsByCategory(currentTrainerCategory, currentTrainerSubtype);
-    const pool = algorithms.filter((algo) => selectedCaseIds.has(algo.id));
+    const pool = getTrainerSelectedVisibleAlgorithms();
 
     if (pool.length === 0) {
         document.getElementById("trainer-scramble").innerText = t("trainerNoPoolScramble");
@@ -1669,6 +1741,7 @@ function generateNextScramble() {
         document.getElementById("scramble-group").innerText = "--";
         document.getElementById("trainer-status").innerText = t("trainerNoPoolStatus");
         currentScrambleData = null;
+        renderTrainerHistory();
         return;
     }
 
@@ -1707,6 +1780,7 @@ function generateNextScramble() {
     document.getElementById("trainer-scramble").innerText = scrambleMoves.join(" ");
     document.getElementById("trainer-timer").innerText = "0.00";
     document.getElementById("trainer-status").innerText = t("trainerReadyStatus");
+    renderTrainerHistory();
 }
 
 function getTrainerNow() {
@@ -1789,13 +1863,56 @@ function getTrainerRecordFinalTime(record) {
     return record.rawTimeMs + (record.penalty === "plus2" ? 2000 : 0);
 }
 
+function getTrainerHistoryEntryTimestamp(entry = null) {
+    const recordedAtTimestamp = Date.parse(String(entry?.recordedAt || ""));
+    if (Number.isFinite(recordedAtTimestamp)) return recordedAtTimestamp;
+
+    const legacyIdMatch = String(entry?.id || "").match(/^trainer-(\d+)-/);
+    if (legacyIdMatch) return Number(legacyIdMatch[1]) || 0;
+    return 0;
+}
+
+function getTrainerScopedHistoryGroups() {
+    const algorithms = getAlgorithmsByCategory(currentTrainerCategory, currentTrainerSubtype);
+
+    return algorithms
+        .map((algo) => ({
+            algo,
+            entries: getTrainerSolveHistory(algo.id)
+        }))
+        .filter(({ entries }) => entries.length > 0)
+        .sort((leftGroup, rightGroup) => {
+            const leftLatest = leftGroup.entries[leftGroup.entries.length - 1] || null;
+            const rightLatest = rightGroup.entries[rightGroup.entries.length - 1] || null;
+            return getTrainerHistoryEntryTimestamp(rightLatest) - getTrainerHistoryEntryTimestamp(leftLatest);
+        });
+}
+
+function getTrainerScopedHistoryEntries() {
+    return getTrainerScopedHistoryGroups()
+        .flatMap(({ entries }) => entries)
+        .sort((leftEntry, rightEntry) => getTrainerHistoryEntryTimestamp(leftEntry) - getTrainerHistoryEntryTimestamp(rightEntry));
+}
+
+function findTrainerHistoryRecord(recordId = "") {
+    if (!recordId) return null;
+
+    const historyStore = getTrainerSolveHistoryStore();
+    for (const [bucketKey, entries] of Object.entries(historyStore)) {
+        const entry = entries.find((historyEntry) => historyEntry.id === recordId);
+        if (entry) return { bucketKey, entry };
+    }
+
+    return null;
+}
+
 function getLatestTrainerSolveRecord() {
-    const historyEntries = getTrainerSolveHistory();
+    const historyEntries = getTrainerScopedHistoryEntries();
     return historyEntries[historyEntries.length - 1] || null;
 }
 
-function updateTrainerSolveHistory(nextHistoryEntries = []) {
-    saveTrainerSolveHistory(nextHistoryEntries);
+function updateTrainerSolveHistory(nextHistoryEntries = [], caseId = "") {
+    saveTrainerSolveHistory(nextHistoryEntries, caseId);
     renderTrainerHistory();
 }
 
@@ -1814,9 +1931,8 @@ function toggleTrainerRecordExpanded(recordId) {
 }
 
 function resolveTrainerHistoryRecordId(recordId = "") {
-    const historyEntries = getTrainerSolveHistory();
     if (recordId) {
-        return historyEntries.find((entry) => entry.id === recordId)?.id || null;
+        return findTrainerHistoryRecord(recordId)?.entry.id || null;
     }
 
     return getLatestTrainerSolveRecord()?.id || null;
@@ -1832,19 +1948,21 @@ function toggleTrainerHistoryDeleteConfirm(recordId = "") {
 
 function confirmDeleteTrainerRecord(recordId = "") {
     const targetRecordId = resolveTrainerHistoryRecordId(recordId);
-    if (!targetRecordId) return;
+    const matchedRecord = findTrainerHistoryRecord(targetRecordId);
+    if (!targetRecordId || !matchedRecord) return;
 
-    const nextHistoryEntries = getTrainerSolveHistory().filter((entry) => entry.id !== targetRecordId);
+    const nextHistoryEntries = getTrainerSolveHistory(matchedRecord.bucketKey).filter((entry) => entry.id !== targetRecordId);
     trainerHistoryDeleteConfirmRecordId = null;
     if (expandedTrainerHistoryRecordId === targetRecordId) expandedTrainerHistoryRecordId = null;
-    updateTrainerSolveHistory(nextHistoryEntries);
+    updateTrainerSolveHistory(nextHistoryEntries, matchedRecord.bucketKey);
 }
 
 function toggleTrainerPenalty(penalty, recordId = "") {
     const targetRecordId = resolveTrainerHistoryRecordId(recordId);
-    if (!targetRecordId) return;
+    const matchedRecord = findTrainerHistoryRecord(targetRecordId);
+    if (!targetRecordId || !matchedRecord) return;
 
-    const nextHistoryEntries = getTrainerSolveHistory().map((entry) => {
+    const nextHistoryEntries = getTrainerSolveHistory(matchedRecord.bucketKey).map((entry) => {
         if (entry.id !== targetRecordId) return entry;
         return {
             ...entry,
@@ -1853,7 +1971,7 @@ function toggleTrainerPenalty(penalty, recordId = "") {
     });
 
     trainerHistoryDeleteConfirmRecordId = null;
-    updateTrainerSolveHistory(nextHistoryEntries);
+    updateTrainerSolveHistory(nextHistoryEntries, matchedRecord.bucketKey);
 }
 
 function updateTrainerPenaltyControls(latestRecord = null) {
@@ -1938,12 +2056,14 @@ function renderTrainerHistory() {
 
     if (!historyListElement || !ao3Element || !ao5Element || !ao12Element) return;
 
-    const historyEntries = getTrainerSolveHistory();
-    const recentEntries = historyEntries.slice().reverse();
-    const latestRecord = historyEntries[historyEntries.length - 1] || null;
-    const ao3 = calculateTrainerAverage(historyEntries, 3);
-    const ao5 = calculateTrainerAverage(historyEntries, 5);
-    const ao12 = calculateTrainerAverage(historyEntries, 12);
+    const historyGroups = getTrainerScopedHistoryGroups();
+    const historyEntries = historyGroups.flatMap(({ entries }) => entries);
+    const latestRecord = getLatestTrainerSolveRecord();
+    const latestRecordCaseId = String(latestRecord?.caseId || "");
+    const focusEntries = latestRecordCaseId ? getTrainerSolveHistory(latestRecordCaseId) : [];
+    const ao3 = calculateTrainerAverage(focusEntries, 3);
+    const ao5 = calculateTrainerAverage(focusEntries, 5);
+    const ao12 = calculateTrainerAverage(focusEntries, 12);
 
     if (expandedTrainerHistoryRecordId && !historyEntries.some((entry) => entry.id === expandedTrainerHistoryRecordId)) {
         expandedTrainerHistoryRecordId = null;
@@ -1955,7 +2075,7 @@ function renderTrainerHistory() {
     updateTrainerPenaltyControls(latestRecord);
 
     historyListElement.innerHTML = "";
-    if (recentEntries.length === 0) {
+    if (historyGroups.length === 0) {
         const emptyElement = document.createElement("div");
         emptyElement.className = "trainer-history-empty";
         emptyElement.textContent = getTrainerHistoryEmptyText();
@@ -1963,112 +2083,123 @@ function renderTrainerHistory() {
     } else {
         const historyFragment = document.createDocumentFragment();
 
-        recentEntries.forEach((entry, index) => {
-            const isExpanded = entry.id === expandedTrainerHistoryRecordId;
-            const isDeleteConfirming = trainerHistoryDeleteConfirmRecordId === entry.id;
-            const itemElement = document.createElement("div");
-            itemElement.className = `trainer-history-item${index === 0 ? " is-latest" : ""}${isExpanded ? " is-expanded" : ""}`;
-            itemElement.addEventListener("click", (event) => {
-                event.stopPropagation();
-                toggleTrainerRecordExpanded(entry.id);
+        historyGroups.forEach(({ algo, entries }) => {
+            const groupElement = document.createElement("section");
+
+            const groupLabelElement = document.createElement("div");
+            groupLabelElement.className = "trainer-history-detail-label";
+            groupLabelElement.textContent = `${getAlgoBadgeLabel(algo)} / ${getAlgoDisplayName(algo)}`;
+            groupElement.appendChild(groupLabelElement);
+
+            entries.slice().reverse().forEach((entry, index) => {
+                const isExpanded = entry.id === expandedTrainerHistoryRecordId;
+                const isDeleteConfirming = trainerHistoryDeleteConfirmRecordId === entry.id;
+                const itemElement = document.createElement("div");
+                itemElement.className = `trainer-history-item${index === 0 ? " is-latest" : ""}${isExpanded ? " is-expanded" : ""}`;
+                itemElement.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    toggleTrainerRecordExpanded(entry.id);
+                });
+
+                const headElement = document.createElement("div");
+                headElement.className = "trainer-history-head";
+
+                const timeElement = document.createElement("div");
+                timeElement.className = "trainer-history-time";
+                timeElement.textContent = getTrainerDisplayTime(entry);
+
+                const metaElement = document.createElement("div");
+                metaElement.className = "trainer-history-meta";
+                metaElement.textContent = getTrainerHistoryEntryMeta(entry);
+
+                headElement.appendChild(timeElement);
+                headElement.appendChild(metaElement);
+                itemElement.appendChild(headElement);
+
+                if (isExpanded) {
+                    const detailsElement = document.createElement("div");
+                    detailsElement.className = "trainer-history-details";
+
+                    const scrambleLabelElement = document.createElement("div");
+                    scrambleLabelElement.className = "trainer-history-detail-label";
+                    scrambleLabelElement.textContent = getTrainerScrambleLabelText();
+
+                    const scrambleValueElement = document.createElement("div");
+                    scrambleValueElement.className = "trainer-history-detail-value";
+                    scrambleValueElement.textContent = entry.scrambleText || "--";
+
+                    const algorithmLabelElement = document.createElement("div");
+                    algorithmLabelElement.className = "trainer-history-detail-label";
+                    algorithmLabelElement.textContent = getTrainerAlgorithmLabelText();
+
+                    const algorithmValueElement = document.createElement("div");
+                    algorithmValueElement.className = "trainer-history-detail-value";
+                    algorithmValueElement.textContent = entry.algorithmText || "--";
+
+                    const actionRowElement = document.createElement("div");
+                    actionRowElement.className = "trainer-history-action-row";
+
+                    const plus2Button = document.createElement("button");
+                    plus2Button.type = "button";
+                    plus2Button.className = "action-btn trainer-history-action-btn trainer-icon-btn";
+                    setTrainerActionButtonIcon(plus2Button, TRAINER_ACTION_ICONS.plus2, "+2");
+                    setTrainerActionButtonActive(plus2Button, entry.penalty === "plus2");
+                    plus2Button.addEventListener("click", (event) => {
+                        event.stopPropagation();
+                        toggleTrainerPenalty("plus2", entry.id);
+                    });
+
+                    const dnfButton = document.createElement("button");
+                    dnfButton.type = "button";
+                    dnfButton.className = "action-btn trainer-history-action-btn trainer-icon-btn";
+                    setTrainerActionButtonIcon(dnfButton, TRAINER_ACTION_ICONS.dnf, "DNF");
+                    setTrainerActionButtonActive(dnfButton, entry.penalty === "dnf");
+                    dnfButton.addEventListener("click", (event) => {
+                        event.stopPropagation();
+                        toggleTrainerPenalty("dnf", entry.id);
+                    });
+
+                    const deleteButton = document.createElement("button");
+                    deleteButton.type = "button";
+                    deleteButton.className = "action-btn trainer-history-action-btn trainer-delete-btn trainer-icon-btn";
+                    setTrainerActionButtonIcon(
+                        deleteButton,
+                        isDeleteConfirming ? TRAINER_ACTION_ICONS.cancel : TRAINER_ACTION_ICONS.delete,
+                        isDeleteConfirming ? getTrainerDeleteCancelLabelText() : getTrainerDeleteLabelText()
+                    );
+                    deleteButton.classList.toggle("is-armed", isDeleteConfirming);
+                    setTrainerActionButtonActive(deleteButton, isDeleteConfirming);
+                    deleteButton.addEventListener("click", (event) => {
+                        event.stopPropagation();
+                        toggleTrainerHistoryDeleteConfirm(entry.id);
+                    });
+
+                    const confirmButton = document.createElement("button");
+                    confirmButton.type = "button";
+                    confirmButton.className = `action-btn trainer-history-action-btn trainer-delete-confirm-btn trainer-icon-btn${isDeleteConfirming ? "" : " hidden"}`;
+                    setTrainerActionButtonIcon(confirmButton, TRAINER_ACTION_ICONS.confirm, getTrainerDeleteConfirmLabelText());
+                    confirmButton.addEventListener("click", (event) => {
+                        event.stopPropagation();
+                        confirmDeleteTrainerRecord(entry.id);
+                    });
+
+                    actionRowElement.appendChild(plus2Button);
+                    actionRowElement.appendChild(dnfButton);
+                    actionRowElement.appendChild(deleteButton);
+                    actionRowElement.appendChild(confirmButton);
+
+                    detailsElement.appendChild(scrambleLabelElement);
+                    detailsElement.appendChild(scrambleValueElement);
+                    detailsElement.appendChild(algorithmLabelElement);
+                    detailsElement.appendChild(algorithmValueElement);
+                    detailsElement.appendChild(actionRowElement);
+                    itemElement.appendChild(detailsElement);
+                }
+
+                groupElement.appendChild(itemElement);
             });
 
-            const headElement = document.createElement("div");
-            headElement.className = "trainer-history-head";
-
-            const timeElement = document.createElement("div");
-            timeElement.className = "trainer-history-time";
-            timeElement.textContent = getTrainerDisplayTime(entry);
-
-            const metaElement = document.createElement("div");
-            metaElement.className = "trainer-history-meta";
-            metaElement.textContent = getTrainerHistoryEntryMeta(entry);
-
-            headElement.appendChild(timeElement);
-            headElement.appendChild(metaElement);
-            itemElement.appendChild(headElement);
-
-            if (isExpanded) {
-                const detailsElement = document.createElement("div");
-                detailsElement.className = "trainer-history-details";
-
-                const scrambleLabelElement = document.createElement("div");
-                scrambleLabelElement.className = "trainer-history-detail-label";
-                scrambleLabelElement.textContent = getTrainerScrambleLabelText();
-
-                const scrambleValueElement = document.createElement("div");
-                scrambleValueElement.className = "trainer-history-detail-value";
-                scrambleValueElement.textContent = entry.scrambleText || "--";
-
-                const algorithmLabelElement = document.createElement("div");
-                algorithmLabelElement.className = "trainer-history-detail-label";
-                algorithmLabelElement.textContent = getTrainerAlgorithmLabelText();
-
-                const algorithmValueElement = document.createElement("div");
-                algorithmValueElement.className = "trainer-history-detail-value";
-                algorithmValueElement.textContent = entry.algorithmText || "--";
-
-                const actionRowElement = document.createElement("div");
-                actionRowElement.className = "trainer-history-action-row";
-
-                const plus2Button = document.createElement("button");
-                plus2Button.type = "button";
-                plus2Button.className = "action-btn trainer-history-action-btn trainer-icon-btn";
-                setTrainerActionButtonIcon(plus2Button, TRAINER_ACTION_ICONS.plus2, "+2");
-                setTrainerActionButtonActive(plus2Button, entry.penalty === "plus2");
-                plus2Button.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                    toggleTrainerPenalty("plus2", entry.id);
-                });
-
-                const dnfButton = document.createElement("button");
-                dnfButton.type = "button";
-                dnfButton.className = "action-btn trainer-history-action-btn trainer-icon-btn";
-                setTrainerActionButtonIcon(dnfButton, TRAINER_ACTION_ICONS.dnf, "DNF");
-                setTrainerActionButtonActive(dnfButton, entry.penalty === "dnf");
-                dnfButton.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                    toggleTrainerPenalty("dnf", entry.id);
-                });
-
-                const deleteButton = document.createElement("button");
-                deleteButton.type = "button";
-                deleteButton.className = "action-btn trainer-history-action-btn trainer-delete-btn trainer-icon-btn";
-                setTrainerActionButtonIcon(
-                    deleteButton,
-                    isDeleteConfirming ? TRAINER_ACTION_ICONS.cancel : TRAINER_ACTION_ICONS.delete,
-                    isDeleteConfirming ? getTrainerDeleteCancelLabelText() : getTrainerDeleteLabelText()
-                );
-                deleteButton.classList.toggle("is-armed", isDeleteConfirming);
-                setTrainerActionButtonActive(deleteButton, isDeleteConfirming);
-                deleteButton.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                    toggleTrainerHistoryDeleteConfirm(entry.id);
-                });
-
-                const confirmButton = document.createElement("button");
-                confirmButton.type = "button";
-                confirmButton.className = `action-btn trainer-history-action-btn trainer-delete-confirm-btn trainer-icon-btn${isDeleteConfirming ? "" : " hidden"}`;
-                setTrainerActionButtonIcon(confirmButton, TRAINER_ACTION_ICONS.confirm, getTrainerDeleteConfirmLabelText());
-                confirmButton.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                    confirmDeleteTrainerRecord(entry.id);
-                });
-
-                actionRowElement.appendChild(plus2Button);
-                actionRowElement.appendChild(dnfButton);
-                actionRowElement.appendChild(deleteButton);
-                actionRowElement.appendChild(confirmButton);
-
-                detailsElement.appendChild(scrambleLabelElement);
-                detailsElement.appendChild(scrambleValueElement);
-                detailsElement.appendChild(algorithmLabelElement);
-                detailsElement.appendChild(algorithmValueElement);
-                detailsElement.appendChild(actionRowElement);
-                itemElement.appendChild(detailsElement);
-            }
-
-            historyFragment.appendChild(itemElement);
+            historyFragment.appendChild(groupElement);
         });
 
         historyListElement.appendChild(historyFragment);
@@ -2088,14 +2219,16 @@ function renderTrainerHistory() {
 function recordTrainerSolve(rawTimeMs = 0) {
     const normalizedTimeMs = Math.max(0, Math.round(rawTimeMs));
     if (normalizedTimeMs <= 0) return;
+    const currentCaseId = String(currentScrambleData?.id || "").trim();
+    if (!currentCaseId) return;
 
-    const historyEntries = getTrainerSolveHistory();
+    const historyEntries = getTrainerSolveHistory(currentCaseId);
     historyEntries.push({
         id: `trainer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         rawTimeMs: normalizedTimeMs,
         timeMs: normalizedTimeMs,
         penalty: "ok",
-        caseId: String(currentScrambleData?.id || ""),
+        caseId: currentCaseId,
         category: String(currentTrainerCategory || ""),
         subtype: String(currentTrainerSubtype || ""),
         badgeLabel: String(currentScrambleData ? getAlgoBadgeLabel(currentScrambleData) : ""),
@@ -2105,7 +2238,7 @@ function recordTrainerSolve(rawTimeMs = 0) {
         recordedAt: new Date().toISOString()
     });
 
-    saveTrainerSolveHistory(historyEntries);
+    saveTrainerSolveHistory(historyEntries, currentCaseId);
     renderTrainerHistory();
 }
 
